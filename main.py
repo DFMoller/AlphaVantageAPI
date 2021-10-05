@@ -132,5 +132,6 @@ for count, symbol in enumerate(symbols_5min):
     # if count == 0:
         # title = get_title(raw_5min_json) # Latest data point is taken for date
     format_obj_plot("Title")
-plt.show()
+# plt.show()
+print(sorted_values)
   
