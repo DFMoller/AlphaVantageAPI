@@ -1,3 +1,4 @@
+from matplotlib import colors
 import requests
 import json
 import matplotlib
@@ -16,18 +17,17 @@ from matplotlib.animation import FuncAnimation
 API_KEY = "AVDG281ETZSFEMEB"
 demo_api_key = "demo"
 dt_format = "%Y-%m-%d %H:%M:%S"
-symbols_5min = ["AAPL", "TSLA", "AMZN", "MSFT", "FB"]
-demo_symbol = ["AAPL"]
-font1 = {'family': 'serif', 'size': 20}
-font2 = {'family': 'serif', 'size': 14}
-
+symbols_5min = ["AAPL", "TSLA", "GOOGL", "MSFT", "FB"]
+demo_symbols = ["AAPL"]
+# font1 = {'family': 'serif', 'size': 20, 'color': "#ffffff"}
+# font2 = {'family': 'serif', 'size': 14}
+current_date_format = "%Y-%m-%d"
 
 def get_API_json(symbol):
     url = "https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=" + \
         symbol + "&interval=5min&apikey=" + API_KEY
     print(symbol, "Data: ", url)
     return requests.get(url).json()
-
 
 def get_sorted_df(raw_data):
     useful_data = raw_data["Time Series (5min)"]
@@ -77,35 +77,85 @@ def get_sorted_df(raw_data):
     sorted_df = df.sort_values(["dt"])
     return sorted_df
 
+def clean_data(sorted_df, current_date):
+    cleaned_df = sorted_df
+    for index, row in sorted_df.iterrows():
+        # print(row["dt"])
+        datapoint_date = row["dt"].strftime(current_date_format)
+        if datapoint_date != current_date:
+            cleaned_df = cleaned_df.drop(index)
+            print("Data Point removed due to date mismatch: ", datapoint_date, " || ", current_date)
+    return cleaned_df
 
-def add_line(fig, ax, sorted_values):
-    ax.plot_date(
-        sorted_values["dt"], sorted_values["value"], linestyle="solid", marker=None)
+def get_plotting_info(raw_json):
+    for count, key in enumerate(raw_json["Time Series (5min)"]):
+        if count == 0:
+            dt_obj = datetime.datetime.strptime(key, dt_format)
+            title_date = dt_obj.strftime("%A, %d %b %Y")
+            current_date = dt_obj.strftime(current_date_format)
+    return title_date, current_date
 
-
-def draw_lines(i):
+def draw_lines():
 
     # clear existing lines
     ax.cla()
+
+    max_val = min_val = 0
 
     for count, symbol in enumerate(symbols_5min):
 
         # fetch updated data
         raw_json = get_API_json(symbol) # Unsorted
+
+        # sort data and catch exception
         sorted_values = get_sorted_df(raw_json) # Sorted
 
+        # get date and time for title
+        if count == 0:
+            title_date, current_date = get_plotting_info(raw_json)
+            my_title = "Some stocks from the NYSE on " + title_date
+
+        # clean data by dropping datapoints that do not match current_date
+        cleaned_df = clean_data(sorted_values, current_date)
+
         # plot new data
-        ax.plot_date(sorted_values["dt"], sorted_values["value"], linestyle="solid", marker=None)
+        ax.plot(cleaned_df["dt"], cleaned_df["value"], linestyle="solid", marker=None, linewidth=3)
+        plt.gca().xaxis.set_major_formatter(date_format)
+        ax.title.set_text(my_title)
+        ax.title.set_color("#ffffff")
+        ax.set_ylabel("Percentage Change (%)")
+        ax.set_xlabel("Time")
+        ax.spines['bottom'].set_color('#ffffff')
+        ax.spines['top'].set_color('#2C4051') 
+        ax.spines['right'].set_color('#2C4051')
+        ax.spines['left'].set_color('#ffffff')
+        ax.tick_params(axis='x', colors="#ffffff")
+        ax.tick_params(axis='y', colors='#ffffff')
+        ax.yaxis.label.set_color("#ffffff")
+        ax.xaxis.label.set_color("#ffffff")
+        plt.legend(symbols_5min, loc="best", facecolor='#2C4051', edgecolor="#2C4051", labelcolor="#ffffff")
+
+def try_plotting(i):
+    try:
+        draw_lines()
+    except KeyError as e:
+        if str(e) == "'Time Series (5min)'":
+            print("Cannot make more than 5 api calls per minute! ", "-> KeyError: ", e)
+            print("Waiting for 1 min...")
+            time.sleep(60)
+            draw_lines()
+        else:
+            raise
 
 
 # define and adjust figure
-fig = plt.figure(figsize=(12, 6), facecolor='#DEDEDE')
-ax = plt.subplot(121)
-ax.set_facecolor('#DEDEDE')
+fig = plt.figure(figsize=(12, 6), facecolor='#2C4051', clear=True)
+ax = plt.subplot()
+ax.set_facecolor('#2C4051')
 date_format = mpl_dates.DateFormatter("%H:%M")
-plt.gca().xaxis.set_major_formatter(date_format)
 
-# draw_lines(1)
 
-ani = FuncAnimation(fig, draw_lines, interval=(1000*60*5))
+try_plotting(0)
+
+# ani = FuncAnimation(fig, try_plotting, interval=(60000))
 plt.show()
